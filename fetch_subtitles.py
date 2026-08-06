@@ -18,7 +18,7 @@ works whether videos live directly in ROOT_DIR or in per-season subfolders
 (S01, S02, ...).
 """
 
-__version__ = "0.3.2"
+__version__ = "0.4.0"
 
 import argparse
 import logging
@@ -53,9 +53,6 @@ class _QuietSubliminalTracebacks(logging.Filter):
             record.exc_info = None
             record.exc_text = None
         return True
-
-
-logging.getLogger().handlers[0].addFilter(_QuietSubliminalTracebacks())
 
 VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi"}
 
@@ -166,7 +163,13 @@ def main():
                          help="Skip the name/metadata-based providers and use only bsplayer's "
                               "hash-based lookup, which matches your exact release instead of "
                               "guessing by series/season/episode")
+    parser.add_argument("--debug", action="store_true",
+                         help="Show full tracebacks for provider failures instead of one-line "
+                              "summaries, for troubleshooting a specific provider")
     args = parser.parse_args()
+
+    if not args.debug:
+        logging.getLogger().handlers[0].addFilter(_QuietSubliminalTracebacks())
 
     configure_cache()
 

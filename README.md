@@ -37,6 +37,8 @@ subfolders (S01, S02, ...).
 - `--force-bsplayer` — Skip the name/metadata-based providers and use only
   bsplayer's hash-based lookup, which matches your exact release instead of
   guessing by series/season/episode.
+- `--debug` — Show full tracebacks for provider failures instead of
+  one-line summaries, for troubleshooting a specific provider.
 - `--version` — Show the script version.
 
 If only one language is requested, the saved subtitle filename matches the
