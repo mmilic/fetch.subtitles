@@ -5,6 +5,14 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-08-06
+
+### Changed
+- subliminal's per-provider failure logs (timeouts, HTTP errors, rate
+  limiting, etc.) no longer dump a full traceback to the terminal. It
+  already handles these gracefully by falling back to the next provider or
+  tier, so only the one-line message is kept.
+
 ## [0.3.0] - 2026-08-06
 
 ### Added

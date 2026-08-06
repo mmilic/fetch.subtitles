@@ -18,7 +18,7 @@ works whether videos live directly in ROOT_DIR or in per-season subfolders
 (S01, S02, ...).
 """
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 import argparse
 import logging
@@ -39,6 +39,23 @@ logger = logging.getLogger("fetch_subtitles")
 # download) - that's expected noise from search_external_subtitles, not
 # something this script needs to react to.
 logging.getLogger("subliminal.subtitle").setLevel(logging.CRITICAL)
+
+
+class _QuietSubliminalTracebacks(logging.Filter):
+    """subliminal logs a full traceback at ERROR level for every provider
+    failure (timeouts, HTTP errors, rate limiting, ...) even though it
+    already handles them gracefully - falling back to the next provider or
+    tier. The one-line message (which provider, why) is useful; the
+    traceback repeated per retry per video is not. Drop just the traceback."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name.startswith("subliminal."):
+            record.exc_info = None
+            record.exc_text = None
+        return True
+
+
+logging.getLogger().handlers[0].addFilter(_QuietSubliminalTracebacks())
 
 VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi"}
 
