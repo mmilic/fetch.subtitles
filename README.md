@@ -34,6 +34,9 @@ subfolders (S01, S02, ...).
 - `-l, --language` — Language code (IETF, e.g. `en`, `sr`). Repeatable.
   Default: `en`.
 - `--dry-run` — Only report what's missing, don't download.
+- `--force-bsplayer` — Skip the name/metadata-based providers and use only
+  bsplayer's hash-based lookup, which matches your exact release instead of
+  guessing by series/season/episode.
 - `--version` — Show the script version.
 
 If only one language is requested, the saved subtitle filename matches the

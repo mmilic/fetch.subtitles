@@ -18,7 +18,7 @@ works whether videos live directly in ROOT_DIR or in per-season subfolders
 (S01, S02, ...).
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 import argparse
 import logging
@@ -137,6 +137,10 @@ def main():
     parser.add_argument("-l", "--language", action="append", dest="languages",
                          default=None, help="Language code (IETF, e.g. en, sr). Repeatable. Default: en")
     parser.add_argument("--dry-run", action="store_true", help="Only report what's missing, don't download")
+    parser.add_argument("--force-bsplayer", action="store_true",
+                         help="Skip the name/metadata-based providers and use only bsplayer's "
+                              "hash-based lookup, which matches your exact release instead of "
+                              "guessing by series/season/episode")
     args = parser.parse_args()
 
     configure_cache()
@@ -167,12 +171,16 @@ def main():
         print("Nothing to do.")
         return
 
-    print(f"\nTier 1 ({', '.join(PROVIDERS_BY_NAME)}) - name/metadata-based matching:")
-    still_needed = fetch_tier(needed, PROVIDERS_BY_NAME, single)
+    if args.force_bsplayer:
+        print(f"\nForced bsplayer (hash-based) lookup for {len(needed)} video(s):")
+        still_needed = fetch_tier(needed, ["bsplayer"], single)
+    else:
+        print(f"\nTier 1 ({', '.join(PROVIDERS_BY_NAME)}) - name/metadata-based matching:")
+        still_needed = fetch_tier(needed, PROVIDERS_BY_NAME, single)
 
-    if still_needed:
-        print(f"\nTier 2 fallback ({', '.join(PROVIDERS_FALLBACK)}) for {len(still_needed)} remaining:")
-        still_needed = fetch_tier(still_needed, PROVIDERS_FALLBACK, single)
+        if still_needed:
+            print(f"\nTier 2 fallback ({', '.join(PROVIDERS_FALLBACK)}) for {len(still_needed)} remaining:")
+            still_needed = fetch_tier(still_needed, PROVIDERS_FALLBACK, single)
 
     print(f"\nDone. {len(videos) - len(still_needed)}/{len(videos)} videos now have subtitles in all requested languages.")
     if still_needed:

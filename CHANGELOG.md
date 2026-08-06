@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-08-06
+
+### Added
+- `--force-bsplayer` flag to skip the name/metadata-based tiers and use only
+  bsplayer's hash-based lookup, which matches your exact release instead of
+  guessing by series/season/episode.
+
 ## [0.2.0] - 2026-08-06
 
 ### Added
