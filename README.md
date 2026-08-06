@@ -8,7 +8,7 @@ subtitles in every target language, and fetches the rest — matching by
 series/season/episode parsed from the filename (via guessit), not by video
 hash. Tries a first tier of name/metadata-based providers (gestdown,
 podnapisi, tvsubtitles), then falls back to a second tier (opensubtitles,
-bsplayer) for anything still missing.
+bsplayer, getsubtitle.com) for anything still missing.
 
 ## Usage
 

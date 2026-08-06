@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-08-06
+
+### Added
+- `getsubtitle.com` added to the tier-2 fallback providers, as a custom
+  provider (not bundled with subliminal). Its own website is a dead stub,
+  but its SOAP API at api.getsubtitle.com is still live and was verified by
+  hand (search, download, and real subtitle content all confirmed against
+  a real video hash). Hash-based only, like bsplayer, and reuses the same
+  hash algorithm.
+
 ## [0.4.0] - 2026-08-06
 
 ### Added

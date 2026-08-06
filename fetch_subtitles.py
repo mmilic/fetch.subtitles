@@ -18,18 +18,25 @@ works whether videos live directly in ROOT_DIR or in per-season subfolders
 (S01, S02, ...).
 """
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 import argparse
+import base64
 import logging
+import zlib
 from pathlib import Path
 
-from babelfish import Language
+from babelfish import Language, language_converters
+from defusedxml import ElementTree
 from dogpile.cache.exception import RegionAlreadyConfigured
+from requests import Session
 from subliminal import scan_video, download_best_subtitles, save_subtitles
 from subliminal.cache import region as subliminal_cache_region
 from subliminal.core import search_external_subtitles
+from subliminal.extensions import provider_manager
+from subliminal.providers import Provider
 from subliminal.providers.bsplayer import BSPlayerProvider
+from subliminal.subtitle import Subtitle
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger("fetch_subtitles")
@@ -54,6 +61,140 @@ class _QuietSubliminalTracebacks(logging.Filter):
             record.exc_text = None
         return True
 
+
+class GetSubtitleSubtitle(Subtitle):
+    """getsubtitle.com Subtitle."""
+
+    provider_name = "getsubtitle"
+
+    def __init__(self, language, subtitle_id, *, movie_hash=None, filename=""):
+        super().__init__(language, subtitle_id)
+        self.movie_hash = movie_hash
+        self.filename = filename
+
+    @property
+    def info(self):
+        return self.filename or self.subtitle_id
+
+    def get_matches(self, video):
+        return {"hash"}
+
+
+class GetSubtitleProvider(Provider):
+    """getsubtitle.com Provider.
+
+    Not in subliminal's bundled provider list - www.getsubtitle.com's own
+    site is a dead stub, but its SOAP API at api.getsubtitle.com is still
+    live (confirmed by hand: getLanguages, searchSubtitlesByHash and
+    downloadSubtitles all return real data). Only supports hash-based
+    lookup, using the same OpenSubtitles-style hash bsplayer uses (see
+    hash_video below) - confirmed by testing a real hash against the API.
+    """
+
+    languages = {Language.fromalpha3b(lang) for lang in language_converters["alpha3b"].codes}
+    required_hash = "getsubtitle"
+
+    api_url = "https://api.getsubtitle.com:443/server.php"
+    namespace = "api.getsubtitle.com/nusoap"
+
+    def __init__(self, timeout=10):
+        self.timeout = timeout
+        self.session = None
+
+    def initialize(self):
+        self.session = Session()
+
+    def terminate(self):
+        self.session.close()
+        self.session = None
+
+    def _request(self, func_name, body_xml):
+        envelope = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" '
+            'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
+            'xmlns:xsd="http://www.w3.org/2001/XMLSchema" '
+            'xmlns:SOAP-ENC="http://schemas.xmlsoap.org/soap/encoding/">'
+            "<SOAP-ENV:Body>"
+            f'<{func_name} xmlns="{self.namespace}">{body_xml}</{func_name}>'
+            "</SOAP-ENV:Body>"
+            "</SOAP-ENV:Envelope>"
+        )
+        headers = {
+            "Content-Type": "text/xml; charset=utf-8",
+            "SOAPAction": f'"{self.namespace}#{func_name}"',
+            "User-Agent": "Mozilla/5.0",
+        }
+        res = self.session.post(self.api_url, data=envelope.encode("utf-8"), headers=headers, timeout=self.timeout)
+        return ElementTree.fromstring(res.content)
+
+    def query(self, language, file_hash):
+        root = self._request(
+            "searchSubtitlesByHash",
+            f'<hash xsi:type="xsd:string">{file_hash}</hash>'
+            f'<language xsi:type="xsd:string">{language.alpha3}</language>'
+            '<index xsi:type="xsd:int">0</index>'
+            '<count xsi:type="xsd:int">10</count>',
+        )
+        subtitles = []
+        for item in root.findall(".//item"):
+            cod = item.findtext("cod_subtitle_file")
+            if not cod:
+                continue
+            subtitles.append(
+                GetSubtitleSubtitle(
+                    language=language,
+                    subtitle_id=cod,
+                    movie_hash=file_hash,
+                    filename=item.findtext("file_name", default=""),
+                )
+            )
+        return subtitles
+
+    def list_subtitles(self, video, languages):
+        file_hash = video.hashes.get("getsubtitle")
+        if not file_hash:
+            return []
+        subtitles = []
+        for language in languages:
+            subtitles.extend(self.query(language, file_hash))
+        return subtitles
+
+    def download_subtitle(self, subtitle):
+        root = self._request(
+            "downloadSubtitles",
+            '<subtitles SOAP-ENC:arrayType="tns:SubtitleDownload[1]" xsi:type="SOAP-ENC:Array">'
+            '<item xsi:type="tns:SubtitleDownload">'
+            f"<movie_hash xsi:type=\"xsd:string\">{subtitle.movie_hash}</movie_hash>"
+            f"<cod_subtitle_file xsi:type=\"xsd:int\">{subtitle.subtitle_id}</cod_subtitle_file>"
+            "</item>"
+            "</subtitles>",
+        )
+        data = root.findtext(".//data")
+        if not data:
+            return
+        subtitle.set_content(zlib.decompress(base64.b64decode(data)))
+
+
+# getsubtitle.com uses the same hash algorithm as bsplayer (confirmed by
+# testing a real hash against the API) - reuse it rather than duplicate it.
+GetSubtitleProvider.hash_video = staticmethod(BSPlayerProvider.hash_video)
+
+# This module doubles as the __main__ script, so it can't be registered
+# under its own dotted import path (subliminal would try to re-import
+# "fetch_subtitles" as a *separate* module from the running __main__ one,
+# recursively re-executing this whole file). Registering it against
+# __main__ instead points at the module that's already fully loaded in
+# sys.modules, so no re-import ever happens - but only holds when this file
+# itself is what got run as __main__ (e.g. `python fetch_subtitles.py`).
+# Imported some other way (a REPL, a test harness), __main__ is whatever
+# that context's entry point is and won't have GetSubtitleProvider on it -
+# in which case the getsubtitle provider just isn't registered.
+try:
+    provider_manager.register("getsubtitle = __main__:GetSubtitleProvider")
+except (ValueError, AttributeError):
+    pass
+
 VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi"}
 
 # Tier 1: search by series/season/episode text query, no video hash needed.
@@ -61,15 +202,15 @@ PROVIDERS_BY_NAME = ["gestdown", "podnapisi", "tvsubtitles"]
 
 # Tier 2 fallback: opensubtitles also supports a metadata-only query
 # (series + season + episode), used here purely as a fallback source -
-# not for its hash-based lookup. bsplayer only supports hash-based lookup,
-# so its hash is computed and injected for each video before querying (see
-# HASH_PROVIDERS below).
-PROVIDERS_FALLBACK = ["opensubtitles", "bsplayer"]
+# not for its hash-based lookup. bsplayer and getsubtitle only support
+# hash-based lookup, so their hash is computed and injected for each video
+# before querying (see HASH_PROVIDERS below).
+PROVIDERS_FALLBACK = ["opensubtitles", "bsplayer", "getsubtitle"]
 
 # Providers that only support hash-based lookup (no name/metadata search),
 # mapped to the class whose hash_video() computes the hash subliminal
 # expects to find at video.hashes[name].
-HASH_PROVIDERS = {"bsplayer": BSPlayerProvider}
+HASH_PROVIDERS = {"bsplayer": BSPlayerProvider, "getsubtitle": GetSubtitleProvider}
 
 # Some providers (e.g. tvsubtitles) cache show/episode lookups via
 # subliminal's dogpile region, which raises RegionNotConfigured if left
