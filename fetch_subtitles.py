@@ -18,6 +18,8 @@ works whether videos live directly in ROOT_DIR or in per-season subfolders
 (S01, S02, ...).
 """
 
+__version__ = "0.1.0"
+
 import argparse
 import logging
 from pathlib import Path
@@ -36,8 +38,6 @@ logger = logging.getLogger("fetch_subtitles")
 # download) - that's expected noise from search_external_subtitles, not
 # something this script needs to react to.
 logging.getLogger("subliminal.subtitle").setLevel(logging.CRITICAL)
-
-__version__ = "0.1.0"
 
 VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi"}
 
