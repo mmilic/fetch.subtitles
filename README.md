@@ -34,9 +34,12 @@ subfolders (S01, S02, ...).
 - `-l, --language` — Language code (IETF, e.g. `en`, `sr`). Repeatable.
   Default: `en`.
 - `--dry-run` — Only report what's missing, don't download.
-- `--force-bsplayer` — Skip the name/metadata-based providers and use only
-  bsplayer's hash-based lookup, which matches your exact release instead of
-  guessing by series/season/episode.
+- `--force-<provider>` — Use only that provider, skipping the others and
+  the tier 1/tier 2 split. One flag per provider: `--force-gestdown`,
+  `--force-podnapisi`, `--force-tvsubtitles`, `--force-opensubtitles`,
+  `--force-bsplayer`, `--force-getsubtitle`. Combine multiple flags to use
+  exactly that set (e.g. `--force-bsplayer --force-getsubtitle` to use only
+  the two hash-based providers).
 - `--debug` — Show full tracebacks for provider failures instead of
   one-line summaries, for troubleshooting a specific provider.
 - `--all-versions` — Download every matching subtitle found instead of just

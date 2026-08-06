@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-08-06
+
+### Added
+- `--force-<provider>` flag for every provider (`--force-gestdown`,
+  `--force-podnapisi`, `--force-tvsubtitles`, `--force-opensubtitles`,
+  `--force-bsplayer`, `--force-getsubtitle`), generalizing the existing
+  `--force-bsplayer`. Combinable to select an exact custom provider set,
+  bypassing the tier 1/tier 2 split; unchanged when none are passed.
+
 ## [0.6.0] - 2026-08-06
 
 ### Added

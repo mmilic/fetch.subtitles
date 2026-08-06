@@ -18,7 +18,7 @@ works whether videos live directly in ROOT_DIR or in per-season subfolders
 (S01, S02, ...).
 """
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 import argparse
 import base64
@@ -207,6 +207,19 @@ PROVIDERS_BY_NAME = ["gestdown", "podnapisi", "tvsubtitles"]
 # before querying (see HASH_PROVIDERS below).
 PROVIDERS_FALLBACK = ["opensubtitles", "bsplayer", "getsubtitle"]
 
+ALL_PROVIDERS = PROVIDERS_BY_NAME + PROVIDERS_FALLBACK
+
+# Short description of each provider's matching approach, used to build a
+# --force-<name> flag per provider (see main()).
+PROVIDER_DESCRIPTIONS = {
+    "gestdown": "name/metadata-based matching via TheTVDB",
+    "podnapisi": "name/metadata-based matching",
+    "tvsubtitles": "name/metadata-based matching",
+    "opensubtitles": "metadata-based matching (opensubtitles.org)",
+    "bsplayer": "hash-based lookup, which matches your exact release instead of guessing by series/season/episode",
+    "getsubtitle": "hash-based lookup, which matches your exact release instead of guessing by series/season/episode",
+}
+
 # Providers that only support hash-based lookup (no name/metadata search),
 # mapped to the class whose hash_video() computes the hash subliminal
 # expects to find at video.hashes[name].
@@ -363,10 +376,11 @@ def main():
     parser.add_argument("-l", "--language", action="append", dest="languages",
                          default=None, help="Language code (IETF, e.g. en, sr). Repeatable. Default: en")
     parser.add_argument("--dry-run", action="store_true", help="Only report what's missing, don't download")
-    parser.add_argument("--force-bsplayer", action="store_true",
-                         help="Skip the name/metadata-based providers and use only bsplayer's "
-                              "hash-based lookup, which matches your exact release instead of "
-                              "guessing by series/season/episode")
+    for name in ALL_PROVIDERS:
+        parser.add_argument(f"--force-{name}", action="store_true",
+                             help=f"Use only {name} ({PROVIDER_DESCRIPTIONS[name]}), skipping the "
+                                  "other providers and the tier 1/tier 2 split. Combine multiple "
+                                  "--force-* flags to use exactly that set.")
     parser.add_argument("--debug", action="store_true",
                          help="Show full tracebacks for provider failures instead of one-line "
                               "summaries, for troubleshooting a specific provider")
@@ -407,13 +421,15 @@ def main():
         print("Nothing to do.")
         return
 
+    selected_providers = [name for name in ALL_PROVIDERS if getattr(args, f"force_{name}")]
+
     if args.all_versions:
-        providers = ["bsplayer"] if args.force_bsplayer else PROVIDERS_BY_NAME + PROVIDERS_FALLBACK
+        providers = selected_providers or ALL_PROVIDERS
         print(f"\nAll versions ({', '.join(providers)}) for {len(needed)} video(s):")
         still_needed = fetch_all_versions(needed, providers)
-    elif args.force_bsplayer:
-        print(f"\nForced bsplayer (hash-based) lookup for {len(needed)} video(s):")
-        still_needed = fetch_tier(needed, ["bsplayer"], single)
+    elif selected_providers:
+        print(f"\nForced providers ({', '.join(selected_providers)}) for {len(needed)} video(s):")
+        still_needed = fetch_tier(needed, selected_providers, single)
     else:
         print(f"\nTier 1 ({', '.join(PROVIDERS_BY_NAME)}) - name/metadata-based matching:")
         still_needed = fetch_tier(needed, PROVIDERS_BY_NAME, single)
