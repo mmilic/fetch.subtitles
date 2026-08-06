@@ -7,8 +7,8 @@ Scans a directory recursively for video files, skips any that already have
 subtitles in every target language, and fetches the rest — matching by
 series/season/episode parsed from the filename (via guessit), not by video
 hash. Tries a first tier of name/metadata-based providers (gestdown,
-podnapisi, tvsubtitles), then falls back to a second tier (opensubtitles)
-for anything still missing.
+podnapisi, tvsubtitles), then falls back to a second tier (opensubtitles,
+bsplayer) for anything still missing.
 
 ## Usage
 

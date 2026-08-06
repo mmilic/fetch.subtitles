@@ -18,7 +18,7 @@ works whether videos live directly in ROOT_DIR or in per-season subfolders
 (S01, S02, ...).
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 import argparse
 import logging
@@ -29,6 +29,7 @@ from dogpile.cache.exception import RegionAlreadyConfigured
 from subliminal import scan_video, download_best_subtitles, save_subtitles
 from subliminal.cache import region as subliminal_cache_region
 from subliminal.core import search_external_subtitles
+from subliminal.providers.bsplayer import BSPlayerProvider
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger("fetch_subtitles")
@@ -46,8 +47,15 @@ PROVIDERS_BY_NAME = ["gestdown", "podnapisi", "tvsubtitles"]
 
 # Tier 2 fallback: opensubtitles also supports a metadata-only query
 # (series + season + episode), used here purely as a fallback source -
-# not for its hash-based lookup.
-PROVIDERS_FALLBACK = ["opensubtitles"]
+# not for its hash-based lookup. bsplayer only supports hash-based lookup,
+# so its hash is computed and injected for each video before querying (see
+# HASH_PROVIDERS below).
+PROVIDERS_FALLBACK = ["opensubtitles", "bsplayer"]
+
+# Providers that only support hash-based lookup (no name/metadata search),
+# mapped to the class whose hash_video() computes the hash subliminal
+# expects to find at video.hashes[name].
+HASH_PROVIDERS = {"bsplayer": BSPlayerProvider}
 
 # Some providers (e.g. tvsubtitles) cache show/episode lookups via
 # subliminal's dogpile region, which raises RegionNotConfigured if left
@@ -95,6 +103,14 @@ def fetch_tier(needed: dict[Path, set[Language]], providers: list[str], single: 
 
     if not scanned:
         return still_needed
+
+    for name, provider_cls in HASH_PROVIDERS.items():
+        if name not in providers:
+            continue
+        for path, video in scanned.items():
+            video_hash = provider_cls.hash_video(str(path))
+            if video_hash:
+                video.hashes[name] = video_hash
 
     all_languages = set().union(*(needed[path] for path in scanned))
     subtitles = download_best_subtitles(set(scanned.values()), all_languages, providers=providers)

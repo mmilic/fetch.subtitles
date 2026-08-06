@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-08-06
+
+### Added
+- `bsplayer` added to the tier-2 fallback providers (bsplayer-subtitles.com).
+  Unlike the other providers, it only supports hash-based lookup, so the
+  video file's hash is now computed and injected before querying it.
+
 ## [0.1.0] - 2026-08-06
 
 ### Added
