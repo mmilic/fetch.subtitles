@@ -18,7 +18,7 @@ works whether videos live directly in ROOT_DIR or in per-season subfolders
 (S01, S02, ...).
 """
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 import argparse
 import base64
@@ -30,7 +30,7 @@ from babelfish import Language, language_converters
 from defusedxml import ElementTree
 from dogpile.cache.exception import RegionAlreadyConfigured
 from requests import Session
-from subliminal import scan_video, download_best_subtitles, save_subtitles
+from subliminal import scan_video, download_best_subtitles, download_subtitles, list_subtitles, save_subtitles
 from subliminal.cache import region as subliminal_cache_region
 from subliminal.core import search_external_subtitles
 from subliminal.extensions import provider_manager
@@ -293,6 +293,69 @@ def fetch_tier(needed: dict[Path, set[Language]], providers: list[str], single: 
     return still_needed
 
 
+def fetch_all_versions(needed: dict[Path, set[Language]], providers: list[str]) -> dict[Path, set[Language]]:
+    """Like fetch_tier, but downloads and saves *every* candidate subtitle
+    found for each video/language instead of picking a single best match.
+    Saved as "<video>.<lang>.<index>.srt", since multiple files per
+    video/language would otherwise overwrite each other."""
+    if not needed:
+        return {}
+
+    scanned = {}
+    still_needed = {}
+    for path, langs in needed.items():
+        try:
+            scanned[path] = scan_video(str(path))
+        except Exception as exc:
+            logger.warning("Could not scan %s: %s", path, exc)
+            still_needed[path] = langs
+
+    if not scanned:
+        return still_needed
+
+    for name, provider_cls in HASH_PROVIDERS.items():
+        if name not in providers:
+            continue
+        for path, video in scanned.items():
+            video_hash = provider_cls.hash_video(str(path))
+            if video_hash:
+                video.hashes[name] = video_hash
+
+    all_languages = set().union(*(needed[path] for path in scanned))
+    found = list_subtitles(set(scanned.values()), all_languages, providers=providers)
+
+    for path, video in scanned.items():
+        candidates = [sub for sub in found.get(video, []) if sub.language in needed[path]]
+        if not candidates:
+            print(f"  MISSING  {path}")
+            still_needed[path] = needed[path]
+            continue
+
+        download_subtitles(candidates)
+        downloaded = [sub for sub in candidates if sub.content]
+
+        by_language: dict[Language, list[Subtitle]] = {}
+        for sub in downloaded:
+            by_language.setdefault(sub.language, []).append(sub)
+
+        for language, subs in by_language.items():
+            subs.sort(key=lambda sub: (sub.provider_name, str(sub.subtitle_id)))
+            lang_code = language.alpha2 or str(language)
+            for index, sub in enumerate(subs, start=1):
+                out_path = path.parent / f"{path.stem}.{lang_code}.{index}.srt"
+                out_path.write_bytes(sub.content)
+
+        remaining = needed[path] - set(by_language)
+        if not remaining:
+            print(f"  OK       {path}  ({len(downloaded)} version(s) across {len(by_language)} language(s))")
+        else:
+            found_str = " (partial)" if by_language else ""
+            print(f"  MISSING{found_str}  {path}")
+            still_needed[path] = remaining
+
+    return still_needed
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -307,6 +370,10 @@ def main():
     parser.add_argument("--debug", action="store_true",
                          help="Show full tracebacks for provider failures instead of one-line "
                               "summaries, for troubleshooting a specific provider")
+    parser.add_argument("--all-versions", action="store_true",
+                         help="Download every matching subtitle found instead of just the best "
+                              "one, saved as <video>.<lang>.<index>.srt. Searches all providers "
+                              "in a single pass rather than tier by tier.")
     args = parser.parse_args()
 
     if not args.debug:
@@ -340,7 +407,11 @@ def main():
         print("Nothing to do.")
         return
 
-    if args.force_bsplayer:
+    if args.all_versions:
+        providers = ["bsplayer"] if args.force_bsplayer else PROVIDERS_BY_NAME + PROVIDERS_FALLBACK
+        print(f"\nAll versions ({', '.join(providers)}) for {len(needed)} video(s):")
+        still_needed = fetch_all_versions(needed, providers)
+    elif args.force_bsplayer:
         print(f"\nForced bsplayer (hash-based) lookup for {len(needed)} video(s):")
         still_needed = fetch_tier(needed, ["bsplayer"], single)
     else:

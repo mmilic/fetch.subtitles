@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-08-06
+
+### Added
+- `--all-versions` flag to download every matching subtitle found for a
+  video/language instead of just the single best match, saved as
+  `<video>.<lang>.<index>.srt`. Searches all providers in one combined
+  pass instead of tier by tier, since the whole point is exhaustive
+  results rather than stopping early. Verified end-to-end: 54 distinct
+  real subtitle files saved for a single test episode.
+
 ## [0.5.0] - 2026-08-06
 
 ### Added

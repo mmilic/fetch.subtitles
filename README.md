@@ -39,11 +39,16 @@ subfolders (S01, S02, ...).
   guessing by series/season/episode.
 - `--debug` — Show full tracebacks for provider failures instead of
   one-line summaries, for troubleshooting a specific provider.
+- `--all-versions` — Download every matching subtitle found instead of just
+  the best one, saved as `<video>.<lang>.<index>.srt`. Searches all
+  providers in a single pass rather than tier by tier.
 - `--version` — Show the script version.
 
 If only one language is requested, the saved subtitle filename matches the
 video filename exactly (extension only). With multiple languages, each
-subtitle gets a language-code suffix (e.g. `.en.srt`, `.sr.srt`).
+subtitle gets a language-code suffix (e.g. `.en.srt`, `.sr.srt`). With
+`--all-versions`, every match gets its own numbered file instead (e.g.
+`.en.1.srt`, `.en.2.srt`).
 
 ## Versioning
 
