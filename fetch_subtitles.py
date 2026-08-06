@@ -18,7 +18,7 @@ works whether videos live directly in ROOT_DIR or in per-season subfolders
 (S01, S02, ...).
 """
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 import argparse
 import logging
@@ -94,11 +94,19 @@ def find_videos(root: Path) -> list[Path]:
     )
 
 
-def missing_languages(video_path: Path, languages: set[Language]) -> set[Language]:
+def missing_languages(video_path: Path, languages: set[Language], single: bool) -> set[Language]:
     """Return the subset of `languages` not already covered by a subtitle
     next to `video_path`."""
     existing = search_external_subtitles(video_path.name, directory=str(video_path.parent))
     have = {sub.language for sub in existing.values()}
+    if single and Language("und") in have:
+        # save_subtitles(single=True) saves without a language suffix (see
+        # main()), so subliminal can't tell what language a file like
+        # "Show S01E01.srt" is from its name alone and reports it as "und".
+        # Since we're only tracking one language here, treat it as covering
+        # that language - otherwise it looks missing on every run and gets
+        # re-downloaded every time.
+        return set()
     return languages - have
 
 
@@ -173,7 +181,7 @@ def main():
 
     needed = {}
     for v in videos:
-        langs = missing_languages(v, languages)
+        langs = missing_languages(v, languages, single)
         if langs:
             needed[v] = langs
     print(f"{len(needed)} missing a subtitle in {', '.join(lang_codes)}.")
