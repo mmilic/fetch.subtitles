@@ -3,12 +3,14 @@
 Bulk subtitle fetcher for a local TV series library, built on
 [subliminal](https://github.com/Diaoul/subliminal).
 
-Scans a directory recursively for video files, skips any that already have
-subtitles in every target language, and fetches the rest — matching by
+Scans a directory recursively for video files and searches every one of
+them for subtitles, regardless of whether one already exists — matching by
 series/season/episode parsed from the filename (via guessit), not by video
 hash. Tries a first tier of name/metadata-based providers (gestdown,
 podnapisi, tvsubtitles), then falls back to a second tier (opensubtitles,
-bsplayer, getsubtitle.com) for anything still missing.
+bsplayer, getsubtitle.com) for anything still missing. Existing subtitle
+files are never overwritten — a freshly downloaded one gets a unique
+filename instead.
 
 ## Usage
 
@@ -33,7 +35,7 @@ subfolders (S01, S02, ...).
 
 - `-l, --language` — Language code (IETF, e.g. `en`, `sr`). Repeatable.
   Default: `en`.
-- `--dry-run` — Only report what's missing, don't download.
+- `--dry-run` — Only list the videos that would be searched, don't download.
 - `--force-<provider>` — Use only that provider, skipping the others and
   the tier 1/tier 2 split. One flag per provider: `--force-gestdown`,
   `--force-podnapisi`, `--force-tvsubtitles`, `--force-opensubtitles`,
@@ -51,7 +53,9 @@ If only one language is requested, the saved subtitle filename matches the
 video filename exactly (extension only). With multiple languages, each
 subtitle gets a language-code suffix (e.g. `.en.srt`, `.sr.srt`). With
 `--all-versions`, every match gets its own numbered file instead (e.g.
-`.en.1.srt`, `.en.2.srt`).
+`.en.1.srt`, `.en.2.srt`). Since every run searches regardless of what's
+already there, a name that's already taken gets a numeric suffix instead
+of being overwritten (e.g. a second `en` download becomes `.en.2.srt`).
 
 ## Versioning
 

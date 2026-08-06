@@ -2,11 +2,13 @@
 """
 Bulk subtitle fetcher for a local TV series library.
 
-Scans season folders for video files, skips any that already have subtitles
-in every target language, and fetches the rest using subliminal - matching by
-series/season/episode parsed from the filename (via guessit), not by video
-hash. Some providers only support hash-based lookup or may be unreachable in
-a given environment; this script tries a first tier of name/metadata-based
+Scans season folders for video files and searches every one of them for
+subtitles using subliminal - matching by series/season/episode parsed from
+the filename (via guessit), not by video hash - regardless of whether a
+subtitle already exists next to the video. Existing subtitle files are never
+overwritten: a freshly downloaded one gets a unique filename instead. Some
+providers only support hash-based lookup or may be unreachable in a given
+environment; this script tries a first tier of name/metadata-based
 providers, then falls back to a second tier for anything still missing.
 
 Usage:
@@ -18,7 +20,7 @@ works whether videos live directly in ROOT_DIR or in per-season subfolders
 (S01, S02, ...).
 """
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 import argparse
 import base64
@@ -30,9 +32,8 @@ from babelfish import Language, language_converters
 from defusedxml import ElementTree
 from dogpile.cache.exception import RegionAlreadyConfigured
 from requests import Session
-from subliminal import scan_video, download_best_subtitles, download_subtitles, list_subtitles, save_subtitles
+from subliminal import scan_video, download_best_subtitles, download_subtitles, list_subtitles
 from subliminal.cache import region as subliminal_cache_region
-from subliminal.core import search_external_subtitles
 from subliminal.extensions import provider_manager
 from subliminal.providers import Provider
 from subliminal.providers.bsplayer import BSPlayerProvider
@@ -245,20 +246,39 @@ def find_videos(root: Path) -> list[Path]:
     )
 
 
-def missing_languages(video_path: Path, languages: set[Language], single: bool) -> set[Language]:
-    """Return the subset of `languages` not already covered by a subtitle
-    next to `video_path`."""
-    existing = search_external_subtitles(video_path.name, directory=str(video_path.parent))
-    have = {sub.language for sub in existing.values()}
-    if single and Language("und") in have:
-        # save_subtitles(single=True) saves without a language suffix (see
-        # main()), so subliminal can't tell what language a file like
-        # "Show S01E01.srt" is from its name alone and reports it as "und".
-        # Since we're only tracking one language here, treat it as covering
-        # that language - otherwise it looks missing on every run and gets
-        # re-downloaded every time.
-        return set()
-    return languages - have
+def language_code(language: Language) -> str:
+    return language.alpha2 or str(language)
+
+
+def unique_subtitle_path(video_path: Path, language: Language, *, single: bool) -> Path:
+    """Return a path to save a subtitle for `language` next to `video_path`
+    that doesn't overwrite an existing file. Tries the normal clean name
+    first (matching video_path exactly if `single`, otherwise with a
+    language suffix); if that's taken, adds an incrementing numeric suffix
+    instead of clobbering whatever's already there."""
+    if single:
+        candidate = video_path.with_suffix(".srt")
+    else:
+        candidate = video_path.parent / f"{video_path.stem}.{language_code(language)}.srt"
+    if not candidate.exists():
+        return candidate
+
+    index = 2
+    while True:
+        candidate = video_path.parent / f"{video_path.stem}.{language_code(language)}.{index}.srt"
+        if not candidate.exists():
+            return candidate
+        index += 1
+
+
+def next_free_index(video_path: Path, lang_code: str) -> int:
+    """Return the next unused index for "<video>.<lang_code>.<n>.srt" next
+    to `video_path`, so repeated --all-versions runs add to what's already
+    there instead of overwriting it."""
+    index = 1
+    while (video_path.parent / f"{video_path.stem}.{lang_code}.{index}.srt").exists():
+        index += 1
+    return index
 
 
 def fetch_tier(needed: dict[Path, set[Language]], providers: list[str], single: bool) -> dict[Path, set[Language]]:
@@ -293,8 +313,10 @@ def fetch_tier(needed: dict[Path, set[Language]], providers: list[str], single: 
 
     for path, video in scanned.items():
         found = subtitles.get(video, [])
-        if found:
-            save_subtitles(video, found, single=single)
+        for sub in found:
+            if sub.content:
+                out_path = unique_subtitle_path(path, sub.language, single=single)
+                out_path.write_bytes(sub.content)
         remaining = needed[path] - {sub.language for sub in found}
         if not remaining:
             print(f"  OK       {path}")
@@ -353,9 +375,10 @@ def fetch_all_versions(needed: dict[Path, set[Language]], providers: list[str]) 
 
         for language, subs in by_language.items():
             subs.sort(key=lambda sub: (sub.provider_name, str(sub.subtitle_id)))
-            lang_code = language.alpha2 or str(language)
-            for index, sub in enumerate(subs, start=1):
-                out_path = path.parent / f"{path.stem}.{lang_code}.{index}.srt"
+            lang_code = language_code(language)
+            start = next_free_index(path, lang_code)
+            for offset, sub in enumerate(subs):
+                out_path = path.parent / f"{path.stem}.{lang_code}.{start + offset}.srt"
                 out_path.write_bytes(sub.content)
 
         remaining = needed[path] - set(by_language)
@@ -375,7 +398,8 @@ def main():
     parser.add_argument("root", nargs="?", default=".", help="Directory to scan (default: current directory)")
     parser.add_argument("-l", "--language", action="append", dest="languages",
                          default=None, help="Language code (IETF, e.g. en, sr). Repeatable. Default: en")
-    parser.add_argument("--dry-run", action="store_true", help="Only report what's missing, don't download")
+    parser.add_argument("--dry-run", action="store_true",
+                         help="Only list the videos that would be searched, don't download")
     for name in ALL_PROVIDERS:
         parser.add_argument(f"--force-{name}", action="store_true",
                              help=f"Use only {name} ({PROVIDER_DESCRIPTIONS[name]}), skipping the "
@@ -404,21 +428,16 @@ def main():
     videos = find_videos(root)
     print(f"{len(videos)} video files found.")
 
-    needed = {}
-    for v in videos:
-        langs = missing_languages(v, languages, single)
-        if langs:
-            needed[v] = langs
-    print(f"{len(needed)} missing a subtitle in {', '.join(lang_codes)}.")
-
-    if args.dry_run:
-        for v, langs in needed.items():
-            lang_str = ", ".join(sorted(str(lang) for lang in langs))
-            print(f"  MISSING  {v}  [{lang_str}]")
+    if not videos:
+        print("Nothing to do.")
         return
 
-    if not needed:
-        print("Nothing to do.")
+    needed = {v: set(languages) for v in videos}
+
+    if args.dry_run:
+        lang_str = ", ".join(sorted(lang_codes))
+        for v in videos:
+            print(f"  SEARCH  {v}  [{lang_str}]")
         return
 
     selected_providers = [name for name in ALL_PROVIDERS if getattr(args, f"force_{name}")]

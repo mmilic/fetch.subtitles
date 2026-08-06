@@ -5,6 +5,29 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] - 2026-08-06
+
+### Changed
+- Removed the pre-check that skipped a video if it already had a subtitle
+  for every requested language. Every run now searches and downloads for
+  every video regardless of what's already there. Existing subtitle files
+  are never overwritten - a freshly downloaded one that would collide with
+  an existing filename gets a numeric suffix instead (e.g. `.en.2.srt`).
+  `--all-versions` continues numbering from whatever's already on disk
+  instead of restarting at 1, so repeated runs accumulate rather than
+  clobber earlier results.
+- As a side effect, this removes the 0.3.2 bug where a suffix-less
+  single-language subtitle (detected by subliminal as language "und") was
+  trusted to cover *any* single language requested - there's no longer a
+  "does it already cover this" check to get that wrong.
+- `--dry-run` and its help text now describe listing videos that would be
+  searched, rather than videos "missing" a subtitle - accurate now that
+  every video is always searched.
+
+### Removed
+- `missing_languages()` and the `search_external_subtitles`-based existing-
+  subtitle detection it relied on.
+
 ## [0.7.0] - 2026-08-06
 
 ### Added
