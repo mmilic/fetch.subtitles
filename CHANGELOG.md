@@ -5,6 +5,20 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] - 2026-08-06
+
+### Added
+- The positional argument now accepts one or more paths, each a directory
+  (scanned recursively as before) or a specific video file, in any mix.
+  Lets you target just a handful of episodes instead of a whole directory.
+- The `fetch-subtitles` shell alias now translates host filenames passed
+  on the command line into the corresponding path inside the container's
+  `/videos` mount, rather than only supporting a single directory argument.
+
+### Changed
+- `find_videos()` now takes a list of targets instead of a single root
+  directory.
+
 ## [0.8.0] - 2026-08-06
 
 ### Changed

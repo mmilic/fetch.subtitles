@@ -2,25 +2,26 @@
 """
 Bulk subtitle fetcher for a local TV series library.
 
-Scans season folders for video files and searches every one of them for
-subtitles using subliminal - matching by series/season/episode parsed from
-the filename (via guessit), not by video hash - regardless of whether a
-subtitle already exists next to the video. Existing subtitle files are never
-overwritten: a freshly downloaded one gets a unique filename instead. Some
-providers only support hash-based lookup or may be unreachable in a given
-environment; this script tries a first tier of name/metadata-based
-providers, then falls back to a second tier for anything still missing.
+Takes one or more directories and/or specific video files, and searches
+every video found for subtitles using subliminal - matching by
+series/season/episode parsed from the filename (via guessit), not by video
+hash - regardless of whether a subtitle already exists next to the video.
+Existing subtitle files are never overwritten: a freshly downloaded one gets
+a unique filename instead. Some providers only support hash-based lookup or
+may be unreachable in a given environment; this script tries a first tier of
+name/metadata-based providers, then falls back to a second tier for
+anything still missing.
 
 Usage:
     pip install subliminal
-    python fetch_subtitles.py [ROOT_DIR] [-l en] [-l sr] [--dry-run]
+    python fetch_subtitles.py [PATH ...] [-l en] [-l sr] [--dry-run]
 
-ROOT_DIR defaults to the current directory. It is scanned recursively, so it
-works whether videos live directly in ROOT_DIR or in per-season subfolders
-(S01, S02, ...).
+Each PATH is either a directory (scanned recursively, so it works whether
+videos live directly in it or in per-season subfolders like S01, S02, ...)
+or a specific video file. Defaults to the current directory if omitted.
 """
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 
 import argparse
 import base64
@@ -239,11 +240,22 @@ def configure_cache() -> None:
         pass
 
 
-def find_videos(root: Path) -> list[Path]:
-    return sorted(
-        p for p in root.rglob("*")
-        if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS
-    )
+def find_videos(targets: list[Path]) -> list[Path]:
+    """Resolve `targets` - each either a directory to scan recursively for
+    video files, or a specific video file - into a sorted, deduplicated
+    list of video files."""
+    videos: set[Path] = set()
+    for target in targets:
+        if target.is_dir():
+            videos.update(
+                p for p in target.rglob("*")
+                if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS
+            )
+        elif target.is_file():
+            videos.add(target)
+        else:
+            logger.warning("Path does not exist: %s", target)
+    return sorted(videos)
 
 
 def language_code(language: Language) -> str:
@@ -395,7 +407,9 @@ def fetch_all_versions(needed: dict[Path, set[Language]], providers: list[str]) 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    parser.add_argument("root", nargs="?", default=".", help="Directory to scan (default: current directory)")
+    parser.add_argument("paths", nargs="*", default=["."],
+                         help="Directories to scan recursively and/or specific video files to "
+                              "target. Repeatable, can mix both. Default: current directory")
     parser.add_argument("-l", "--language", action="append", dest="languages",
                          default=None, help="Language code (IETF, e.g. en, sr). Repeatable. Default: en")
     parser.add_argument("--dry-run", action="store_true",
@@ -419,13 +433,13 @@ def main():
 
     configure_cache()
 
-    root = Path(args.root).resolve()
+    targets = [Path(p).resolve() for p in args.paths]
     lang_codes = args.languages or ["en"]
     languages = {Language.fromietf(code) for code in lang_codes}
     single = len(languages) == 1
 
-    print(f"Scanning {root} for video files...")
-    videos = find_videos(root)
+    print(f"Scanning {', '.join(str(t) for t in targets)} for video files...")
+    videos = find_videos(targets)
     print(f"{len(videos)} video files found.")
 
     if not videos:

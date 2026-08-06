@@ -3,14 +3,14 @@
 Bulk subtitle fetcher for a local TV series library, built on
 [subliminal](https://github.com/Diaoul/subliminal).
 
-Scans a directory recursively for video files and searches every one of
-them for subtitles, regardless of whether one already exists — matching by
-series/season/episode parsed from the filename (via guessit), not by video
-hash. Tries a first tier of name/metadata-based providers (gestdown,
-podnapisi, tvsubtitles), then falls back to a second tier (opensubtitles,
-bsplayer, getsubtitle.com) for anything still missing. Existing subtitle
-files are never overwritten — a freshly downloaded one gets a unique
-filename instead.
+Takes one or more directories and/or specific video files, and searches
+every video found for subtitles, regardless of whether one already exists —
+matching by series/season/episode parsed from the filename (via guessit),
+not by video hash. Tries a first tier of name/metadata-based providers
+(gestdown, podnapisi, tvsubtitles), then falls back to a second tier
+(opensubtitles, bsplayer, getsubtitle.com) for anything still missing.
+Existing subtitle files are never overwritten — a freshly downloaded one
+gets a unique filename instead.
 
 ## Usage
 
@@ -24,12 +24,13 @@ Or locally:
 
 ```
 pip install -r requirements.txt
-python fetch_subtitles.py [ROOT_DIR] [-l en] [-l sr] [--dry-run]
+python fetch_subtitles.py [PATH ...] [-l en] [-l sr] [--dry-run]
 ```
 
-`ROOT_DIR` defaults to the current directory and is scanned recursively, so
-it works whether videos live directly in `ROOT_DIR` or in per-season
-subfolders (S01, S02, ...).
+Each `PATH` is either a directory (scanned recursively, so it works whether
+videos live directly in it or in per-season subfolders like S01, S02, ...)
+or a specific video file — mix and match, repeatable. Defaults to the
+current directory if omitted.
 
 ### Options
 
